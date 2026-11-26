@@ -100,6 +100,41 @@ iOS 内购 SKU 的实测清单、以及 5x/20x 为什么没有试用编号：[do
 
 `$persistentStore` 在两边都是 `read(key)` / `write(value, key)`，脚本可以直接复用。
 
+## G1 ACQ 五套预制 Loon 插件（改编自 crhywun/g1-acq v7.12.0）
+
+对应上游 [crhywun/g1-acq](https://github.com/crhywun/g1-acq) `v7.12.0` 的五套预制映射模板，已拆分为五个独立 Loon 插件（开箱即用，无需进网页手动应用模板）：
+
+| 插件 | 匹配方式 | 映射规则 | 互斥/共存说明 |
+|---|---|---|---|
+| **1 元开 Pro** | 前缀 `prefix` | `g1.ios.2tb.` → `com.google.gemini.2tb.ai.m.3month_ip_99p` | 与「Pro 12个月 90p」互斥；可与土区 20TB/30TB、Ultra 75p 共存 |
+| **土区 20TB（1989.99 TRY）** | 精确 `exact` | `g1.ios.20tb.m.v2` → `g1.ios.20tb.m` | 与「Ultra 3个月 75p」互斥；可与 1元开Pro、土区 30TB 共存 |
+| **土区 30TB（2949.99 TRY）** | 精确 `exact` | `g1.ios.30tb.ai.pro.m` → `g1.ios.30tb.m` | 与「Ultra 3个月 75p」互斥；可与 1元开Pro、土区 20TB 共存 |
+| **Ultra 20TB / 30TB · 3个月 75p** | 两条精确 `exact` | `g1.ios.20tb.m.v2` → `g1.20tb.3months_ip_75p.acq`<br>`g1.ios.30tb.ai.pro.m` → `g1.ai.ultra.3months_ip_75p.acq` | 与「土区 20TB / 30TB」互斥；可与 1元开Pro / Pro 12个月共存 |
+| **2TB / Pro · 12个月 90p** | 前缀 `prefix` | `g1.ios.2tb.` → `g1.2tb.ai.12months_ip_90p` | 与「1 元开 Pro」互斥；可与土区 20TB/30TB、Ultra 75p 共存 |
+
+### 下载 / 安装地址（推荐 `gh-proxy.com` 镜像）
+
+1. **1 元开 Pro**：
+   ```
+   https://gh-proxy.com/https://raw.githubusercontent.com/guyue211/g1-sku-live/main/g1-acq/g1-acq-pro-1yuan.plugin
+   ```
+2. **土区 20TB（1989.99 TRY）**：
+   ```
+   https://gh-proxy.com/https://raw.githubusercontent.com/guyue211/g1-sku-live/main/g1-acq/g1-acq-tr-ultra-20tb.plugin
+   ```
+3. **土区 30TB（2949.99 TRY）**：
+   ```
+   https://gh-proxy.com/https://raw.githubusercontent.com/guyue211/g1-sku-live/main/g1-acq/g1-acq-tr-ultra-30tb.plugin
+   ```
+4. **Ultra 20TB / 30TB · 三个月 75p**：
+   ```
+   https://gh-proxy.com/https://raw.githubusercontent.com/guyue211/g1-sku-live/main/g1-acq/g1-acq-ultra-75p.plugin
+   ```
+5. **2TB / Pro · 12个月 90p**：
+   ```
+   https://gh-proxy.com/https://raw.githubusercontent.com/guyue211/g1-sku-live/main/g1-acq/g1-acq-pro-12months-90p.plugin
+   ```
+
 ## 测试
 
 ```sh
