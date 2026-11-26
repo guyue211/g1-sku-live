@@ -29,6 +29,14 @@ https://cdn.jsdelivr.net/gh/guyue211/g1-sku-live@main/g1-sku-live.plugin
 2. 打开 Google One App → **升级** → 进方案页，停两秒让响应跑完；
 3. Safari 打开 `https://one.google.com/g1-sku-live-report`。
 
+**MITM 只加 `one.google.com`。** 绝对不要把 `apple.com` / `icloud.com` 加进去 —— Apple 的支付端点（`bag.itunes.apple.com`、`gateway.icloud.com`）有证书 pinning，被 MITM 后购买必然失败，报 "Unable to Complete Purchase"。
+
+### 找可替换的 offer 的流程
+
+1. **组合生成**：填档位（`20tb` / `30tb` / `2tb` / `helium`），点生成。它按 `g1.ios.` 与 `g1.` 两套前缀 × 周期 × 期间 × 折扣率展开几千个候选，**只列出服务端真的下发过的**。命中 0 个就是这个档位没有可用 offer。
+2. **候选探测**：把候选编号贴进去，看它是不是真下发过、解析出来是什么、能不能当目标。
+3. **改写配置**：从「可作目标」的编号里挑一个填进去，启用。
+
 报告页五块：
 
 **最近一次执行** —— 路径、状态、命中数。状态有五种：

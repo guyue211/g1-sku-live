@@ -9,7 +9,7 @@
 "use strict";
 
 (function () {
-  var VERSION = "g1-sku-live-v1";
+  var VERSION = "g1-sku-live-v2";
   var SCAN_KEY = "g1.live.scan.v1";
   var CFG_KEY = "g1.live.cfg.v1";
   var RUN_KEY = "g1.live.run.v1";
@@ -80,7 +80,17 @@
         index[id].last = now;
         if (typeof index[id].path !== "string") index[id].path = path;
       } else if (scan.ids.length < LIMIT) {
-        index[id] = { id: id, count: 1, first: now, last: now, path: path };
+        /* 上下文：把编号前后 160 字符的 HTML 去掉标签后存下来，
+           里面通常就带着价格、周期、方案名，用来解析这个 SKU 到底是什么。 */
+        var from = Math.max(0, match.index - 160);
+        var to = Math.min(text.length, match.index + id.length + 160);
+        var ctx = text.slice(from, to)
+          .replace(/<[^>]*>/g, " ")
+          .replace(/\\u003c|\\u003e|\\"/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 160);
+        index[id] = { id: id, count: 1, first: now, last: now, path: path, ctx: ctx };
         scan.ids.push(index[id]);
       }
     }

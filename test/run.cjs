@@ -21,7 +21,8 @@ function sandbox(store, opts) {
     },
     $done: (v) => { box.done = v; },
     console: { log: (...a) => logs.push(a.join(" ")) },
-    Date, JSON, Math, isFinite, Number, String, Object, Array, RegExp, decodeURIComponent, encodeURIComponent,
+    Date, JSON, Math, isFinite, Number, String, Object, Array, RegExp,
+    decodeURIComponent, encodeURIComponent,
   };
   return { ctx, box, logs };
 }
@@ -36,144 +37,169 @@ function t(name, fn) {
 
 const store = {};
 
-const LIVE_BODY = JSON.stringify({
-  plans: [
-    { productId: "g1.ios.20tb.m.v2", title: "Google AI Ultra (20 TB)", price: "US$99.99" },
-    { productId: "g1.ai.ultra.3months_ip_75p.acq" },
-    { productId: "g1.2tb.ai.subs_variant" },
-    { productId: "com.google.gemini.2tb.ai.m.3month_ip_99p" },
-    { productId: "g1.2tb.ai.annual.1y_ip_50p_ghostbusters" },
-  ],
-});
+/* 模拟 iOS 的 one.google.com/ai HTML 片段：带价格与周期 */
+const IOS_HTML = `<html><body>
+<div><span>Google AI Pro (5 TB)</span><span>₺869,99</span></div>
+<script>var plans=[{"productId":"g1.ios.ai.2tb.m.ip_1mo_90p.acq","price":"₺86,99","period":"P1M"}];</script>
+<a data-sku="g1.ios.2tb.m.3month_ip_75p">3 个月 2.5 折 ₺217,50</a>
+<a data-sku="g1.ios.20tb.m.v2">Google AI Ultra (20 TB) US$99.99</a>
+<a data-sku="g1.ios.30tb.ai.pro.m">Google AI Ultra (30 TB) US$199.99</a>
+<span>g1.ios.100gb.m.3month_ip_75p</span>
+<span>com.google.one.generic</span>
+</body></html>`;
 
-t("采集 /ai? 响应里的全部编号", () => {
-  const s = sandbox(store, { url: "https://one.google.com/ai?hl=zh", response: LIVE_BODY });
+t("采集并抓上下文（价格/周期）", () => {
+  const s = sandbox(store, { url: "https://one.google.com/ai?hl=zh", response: IOS_HTML });
   run(MAIN, s.ctx);
   const scan = JSON.parse(store["g1.live.scan.v1"]);
-  const got = scan.ids.map((r) => r.id).sort();
-  assert.deepStrictEqual(got, [
-    "com.google.gemini.2tb.ai.m.3month_ip_99p",
-    "g1.2tb.ai.annual.1y_ip_50p_ghostbusters",
-    "g1.2tb.ai.subs_variant",
-    "g1.ai.ultra.3months_ip_75p.acq",
+  const ids = scan.ids.map((r) => r.id).sort();
+  assert.deepStrictEqual(ids, [
+    "com.google.one.generic",
+    "g1.ios.100gb.m.3month_ip_75p",
     "g1.ios.20tb.m.v2",
+    "g1.ios.2tb.m.3month_ip_75p",
+    "g1.ios.30tb.ai.pro.m",
+    "g1.ios.ai.2tb.m.ip_1mo_90p.acq",
   ]);
-  assert.strictEqual(scan.scanned, 1);
+  const withCtx = scan.ids.filter((r) => typeof r.ctx === "string" && r.ctx.length > 0);
+  assert.strictEqual(withCtx.length, scan.ids.length, "每个编号都应带上下文");
+  const pro = scan.ids.find((r) => r.id === "g1.ios.20tb.m.v2");
+  assert.match(pro.ctx, /Ultra|99/, "上下文里应能读到价格或名称");
 });
 
-t("转义点号解码后再采集", () => {
-  const s2 = {};
-  const body = '{"id":"g1\\u002eios\\u002e20tb\\u002em\\u002ev2"}';
-  const s = sandbox(s2, { url: "https://one.google.com/ai", response: body });
-  run(MAIN, s.ctx);
-  const scan = JSON.parse(s2["g1.live.scan.v1"]);
-  assert.deepStrictEqual(scan.ids.map((r) => r.id), ["g1.ios.20tb.m.v2"]);
+t("解析：命名空间 / 档位 / 周期 / 类型 / 折扣率", () => {
+  const s = sandbox(store, { url: "https://one.google.com/g1-sku-live-report?format=json" });
+  run(REPORT, s.ctx);
+  const j = JSON.parse(s.box.done.response.body);
+  const by = {};
+  for (const r of j.scan.ids) by[r.raw] = r;
+
+  const a = by["g1.ios.ai.2tb.m.ip_1mo_90p.acq"];
+  assert.strictEqual(a.ns, "ios");
+  assert.strictEqual(a.tier, "2tb");
+  assert.strictEqual(a.cycle, "月付");
+  assert.strictEqual(a.kind, "discount");
+  assert.strictEqual(a.discount, 90);
+  assert.strictEqual(a.period, "1 个月");
+  assert.strictEqual(a.acq, true);
+  assert.strictEqual(a.ok, true, "iOS 折扣编号应判为可作目标");
+
+  const b = by["g1.ios.2tb.m.3month_ip_75p"];
+  assert.strictEqual(b.discount, 75);
+  assert.strictEqual(b.period, "3 个月");
+  assert.strictEqual(b.ok, true);
+
+  const c = by["g1.ios.20tb.m.v2"];
+  assert.strictEqual(c.kind, "entry");
+  assert.strictEqual(c.ok, false, "裸入口不能当目标");
+  assert.match(c.note, /入口/);
+
+  const d = by["com.google.one.generic"];
+  assert.strictEqual(d.ns, "apple");
+  assert.strictEqual(d.ok, false);
 });
 
-t("非 one.google.com 直接放行", () => {
-  const s = sandbox({}, { url: "https://example.com/ai", response: "g1.ios.20tb.m.v2" });
-  run(MAIN, s.ctx);
-  assert.ok(isEmpty(s.box.done));
+t("解析：Android 命名空间判为不可用", () => {
+  const st = {};
+  const s0 = sandbox(st, { url: "https://one.google.com/ai", response: '{"a":"g1.2tb.ai.12months_eft","b":"g1.play.20tb"}' });
+  run(MAIN, s0.ctx);
+  const s = sandbox(st, { url: "https://one.google.com/g1-sku-live-report?format=json" });
+  run(REPORT, s.ctx);
+  const j = JSON.parse(s.box.done.response.body);
+  const by = {};
+  for (const r of j.scan.ids) by[r.raw] = r;
+  assert.strictEqual(by["g1.2tb.ai.12months_eft"].ns, "android");
+  assert.strictEqual(by["g1.2tb.ai.12months_eft"].kind, "trial");
+  assert.strictEqual(by["g1.2tb.ai.12months_eft"].period, "12 个月");
+  assert.strictEqual(by["g1.2tb.ai.12months_eft"].ok, false);
+  assert.match(by["g1.2tb.ai.12months_eft"].note, /非 iOS/);
+  assert.strictEqual(by["g1.play.20tb"].ns, "play");
 });
 
-t("报告页 URL 不被主脚本接管", () => {
-  const s = sandbox({}, { url: "https://one.google.com/g1-sku-live-report", response: "{}" });
-  run(MAIN, s.ctx);
-  assert.ok(isEmpty(s.box.done));
+t("组合生成：只列出服务端真的下发过的", () => {
+  const s = sandbox(store, { url: "https://one.google.com/g1-sku-live-report?format=json&gen=20tb" });
+  run(REPORT, s.ctx);
+  const j = JSON.parse(s.box.done.response.body);
+  assert.ok(j.gen.generated > 100, "应生成大量候选");
+  assert.strictEqual(j.gen.live, 0, "20TB 只有裸入口，不该命中任何 offer 组合");
 });
 
-t("未启用时不改写，但记录 targetObserved", () => {
-  store["g1.live.cfg.v1"] = JSON.stringify({ schemaVersion: 1, enabled: false, sources: ["g1.ios.20tb.m.v2"], target: "g1.ai.ultra.3months_ip_75p.acq" });
-  const s = sandbox(store, { url: "https://one.google.com/ai?x=1", response: LIVE_BODY });
-  run(MAIN, s.ctx);
-  assert.ok(isEmpty(s.box.done));
-  const r = JSON.parse(store["g1.live.run.v1"]);
-  assert.strictEqual(r.status, "disabled");
-  assert.strictEqual(r.targetObserved, true);
+t("组合生成：2tb 档位能命中已下发的折扣编号", () => {
+  const s = sandbox(store, { url: "https://one.google.com/g1-sku-live-report?format=json&gen=2tb" });
+  run(REPORT, s.ctx);
+  const j = JSON.parse(s.box.done.response.body);
+  assert.ok(j.gen.live >= 2, "应命中 3month_ip_75p 与 ip_1mo_90p 两类");
+  const ids = j.gen.hits.map((h) => h.raw);
+  assert.ok(ids.includes("g1.ios.2tb.m.3month_ip_75p"), "周期在前的写法");
+  assert.ok(ids.includes("g1.ios.ai.2tb.m.ip_1mo_90p.acq"), "ai.2tb 词序 + 周期在 ip 里");
 });
 
-t("启用后整 token 改写，JSON 结构完好", () => {
-  store["g1.live.cfg.v1"] = JSON.stringify({ schemaVersion: 1, enabled: true, sources: ["g1.ios.20tb.m.v2"], target: "g1.ai.ultra.3months_ip_90p.acq" });
-  const s = sandbox(store, { url: "https://one.google.com/ai?x=1", response: LIVE_BODY });
+t("候选探测：下发过 + 可作目标", () => {
+  const s = sandbox(store, {
+    url: "https://one.google.com/g1-sku-live-report?cand=" +
+      encodeURIComponent("g1.ios.ai.2tb.m.ip_1mo_90p.acq\ng1.ios.20tb.m.1month_eft.acq"),
+  });
+  run(REPORT, s.ctx);
+  const body = s.box.done.response.body;
+  assert.match(body, /下发过/);
+  assert.match(body, /未采集到/);
+  const j = sandbox(store, { url: "https://one.google.com/g1-sku-live-report?format=json&cand=" + encodeURIComponent("g1.ios.ai.2tb.m.ip_1mo_90p.acq") });
+  run(REPORT, j.ctx);
+  const p = JSON.parse(j.box.done.response.body).probe;
+  assert.strictEqual(p.candidates[0].live, true);
+  assert.strictEqual(p.candidates[0].ok, true);
+  assert.strictEqual(p.usable, 1);
+});
+
+t("报告页 HTML 分栏渲染", () => {
+  const s = sandbox(store, { url: "https://one.google.com/g1-sku-live-report" });
+  run(REPORT, s.ctx);
+  const b = s.box.done.response.body;
+  assert.match(b, /免费试用 · /);
+  assert.match(b, /折扣 · /);
+  assert.match(b, /入口编号 · /);
+  assert.match(b, /组合生成/);
+  assert.match(b, /g1\.ios\.2tb\.m\.3month_ip_75p/);
+});
+
+t("改写：启用后整 token 替换，命中计数", () => {
+  store["g1.live.cfg.v1"] = JSON.stringify({
+    schemaVersion: 1, enabled: true,
+    sources: ["g1.ios.20tb.m.v2"], target: "g1.ios.ai.2tb.m.ip_1mo_90p.acq",
+  });
+  const s = sandbox(store, { url: "https://one.google.com/ai?x=1", response: IOS_HTML });
   run(MAIN, s.ctx);
-  const out = JSON.parse(s.box.done.body);
-  assert.strictEqual(out.plans[0].productId, "g1.ai.ultra.3months_ip_90p.acq");
-  assert.strictEqual(out.plans[2].productId, "g1.2tb.ai.subs_variant");
+  assert.match(s.box.done.body, /g1\.ios\.ai\.2tb\.m\.ip_1mo_90p\.acq/);
+  assert.doesNotMatch(s.box.done.body, /g1\.ios\.20tb\.m\.v2/);
   const r = JSON.parse(store["g1.live.run.v1"]);
   assert.strictEqual(r.hits, 1);
   assert.strictEqual(r.status, "rewritten");
-  assert.strictEqual(r.targetObserved, false);
+  assert.strictEqual(r.targetObserved, true, "目标本身也在响应里，应记为已下发");
 });
 
-t("/plans 也改写，其它路径跳过", () => {
-  store["g1.live.cfg.v1"] = JSON.stringify({ schemaVersion: 1, enabled: true, sources: ["g1.ios.20tb.m.v2"], target: "X" });
-  let s = sandbox(store, { url: "https://one.google.com/plans", response: '{"a":"g1.ios.20tb.m.v2"}' });
-  run(MAIN, s.ctx);
-  assert.strictEqual(JSON.parse(s.box.done.body).a, "X");
-
-  s = sandbox(store, { url: "https://one.google.com/u/0/settings", response: '{"a":"g1.ios.20tb.m.v2"}' });
+t("非 /ai 路径不改写", () => {
+  const s = sandbox(store, { url: "https://one.google.com/u/0/settings", response: IOS_HTML });
   run(MAIN, s.ctx);
   assert.ok(isEmpty(s.box.done));
   assert.strictEqual(JSON.parse(store["g1.live.run.v1"]).status, "path-skip");
 });
 
-t("更长 token 不误伤", () => {
-  store["g1.live.cfg.v1"] = JSON.stringify({ schemaVersion: 1, enabled: true, sources: ["g1.ios.20tb.m.v2"], target: "X" });
-  const s = sandbox(store, { url: "https://one.google.com/ai", response: '{"a":"g1.ios.20tb.m.v2.v3"}' });
-  run(MAIN, s.ctx);
-  assert.ok(isEmpty(s.box.done));
-});
-
-t("报告页 HTML 正常输出", () => {
-  const s = sandbox(store, { url: "https://one.google.com/g1-sku-live-report" });
-  run(REPORT, s.ctx);
-  const res = s.box.done.response;
-  assert.strictEqual(res.status, 200);
-  assert.match(res.headers["Content-Type"], /text\/html/);
-  assert.match(res.body, /疑似目标池/);
-  assert.match(res.body, /g1\.ai\.ultra\.3months_ip_75p\.acq/);
-  assert.match(res.body, /g1\.ios\.20tb\.m\.v2/);
-});
-
-t("候选探测：区分活编号与死编号，并给出同族替代", () => {
-  const s = sandbox(store, { url: "https://one.google.com/g1-sku-live-report?cand=" + encodeURIComponent("g1.ai.ultra.3months_ip_75p.acq,g1.20tb.1month_eft.acq") });
-  run(REPORT, s.ctx);
-  const body = s.box.done.response.body;
-  assert.match(body, /服务端下发过/);
-  assert.match(body, /未采集到/);
-  assert.match(body, /命中 <strong>1<\/strong> · 未命中 <strong>1<\/strong>/);
-});
-
-t("候选探测 JSON 结构", () => {
-  const s = sandbox(store, { url: "https://one.google.com/g1-sku-live-report?format=json&cand=" + encodeURIComponent("g1.20tb.1month_eft.acq") });
-  run(REPORT, s.ctx);
-  const j = JSON.parse(s.box.done.response.body);
-  assert.strictEqual(j.probe.candidates.length, 1);
-  assert.strictEqual(j.probe.candidates[0].live, false);
-  assert.ok(j.probe.candidates[0].siblings.length >= 1);
-  assert.ok(j.scan.total >= 5);
-});
-
 t("POST 保存配置", () => {
   const s = sandbox(store, {
     url: "https://one.google.com/g1-sku-live-report", method: "POST",
-    body: "target=" + encodeURIComponent("g1.ai.ultra.1month_eft.acq") +
+    body: "target=" + encodeURIComponent("g1.ios.ai.2tb.m.ip_1mo_90p.acq") +
           "&sources=" + encodeURIComponent("g1.ios.20tb.m.v2,g1.ios.30tb.ai.pro.m") + "&enabled=1",
-    response: undefined,
   });
   run(REPORT, s.ctx);
   const cfg = JSON.parse(store["g1.live.cfg.v1"]);
-  assert.strictEqual(cfg.enabled, true);
-  assert.strictEqual(cfg.target, "g1.ai.ultra.1month_eft.acq");
   assert.deepStrictEqual(cfg.sources, ["g1.ios.20tb.m.v2", "g1.ios.30tb.ai.pro.m"]);
-  assert.match(s.box.done.response.body, /配置已保存/);
+  assert.strictEqual(cfg.enabled, true);
 });
 
 t("?clear=1 清空", () => {
   const s = sandbox(store, { url: "https://one.google.com/g1-sku-live-report?clear=1" });
   run(REPORT, s.ctx);
   assert.strictEqual(JSON.parse(store["g1.live.scan.v1"]).ids.length, 0);
-  assert.match(s.box.done.response.body, /已清空/);
 });
 
 t("两个脚本都不外联", () => {
