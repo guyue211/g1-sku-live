@@ -17,6 +17,13 @@ const PLUGINS = [
     expectAbsent: ['"g1.ios.2tb.ai.m"', '"g1.ios.2tb.ai.y"'],
   },
   {
+    slug: "g1-acq-pro-1yuan-v711",
+    tag: "G1AcqPro1YuanV711",
+    sampleIn: '["g1.ios.20tb.m.v2","g1.ios.20tb.m.v20","g1.ios.30tb.ai.pro.m","g1.ios.2tb.ai.m"]',
+    expectPresent: ['"com.google.gemini.2tb.ai.m.3month_ip_99p"', '"g1.ios.20tb.m.v20"', '"g1.ios.30tb.ai.pro.m"', '"g1.ios.2tb.ai.m"'],
+    expectAbsent: ['"g1.ios.20tb.m.v2"'],
+  },
+  {
     slug: "g1-acq-tr-ultra-20tb",
     tag: "G1AcqTrUltra20TB",
     sampleIn: '["g1.ios.20tb.m.v2","g1.ios.20tb.m.v20","g1.ios.30tb.ai.pro.m","g1.ios.2tb.ai.m"]',

@@ -134,6 +134,10 @@ iOS 内购 SKU 的实测清单、以及 5x/20x 为什么没有试用编号：[do
    ```
    https://gh-proxy.com/https://raw.githubusercontent.com/guyue211/g1-sku-live/main/g1-acq/g1-acq-pro-12months-90p.plugin
    ```
+6. **1 元开 Pro（v7.11 原版 · 20TB 入口，PR #8 实测版）**：
+   ```
+   https://gh-proxy.com/https://raw.githubusercontent.com/guyue211/g1-sku-live/main/g1-acq/g1-acq-pro-1yuan-v711.plugin
+   ```
 
 ## 测试
 
