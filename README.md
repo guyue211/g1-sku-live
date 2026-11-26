@@ -14,17 +14,24 @@
 
 一个文件同时注册两次：请求阶段负责给报告页本地应答，响应阶段负责采集改写 + 报告页兜底。这样任一侧能力不可用，报告页都打得开。
 
-## 安装
-
-Loon 里：**配置 → 插件 → 添加 → 从 URL 添加**
+## 安装（一个固定地址，长期用这一条）
 
 ```
-https://fastly.jsdelivr.net/gh/guyue211/g1-sku-live@main/g1-sku-live.plugin
+https://ghproxy.net/https://raw.githubusercontent.com/guyue211/g1-sku-live/main/g1-sku-live.plugin
 ```
 
-仓库地址 <https://github.com/guyue211/g1-sku-live>。
+Loon 里：**配置 → 插件 → 添加 → 从 URL 添加**。
 
-**只装一个。** 两个 URL 指向同一份文件，装两个会出现两个同名插件，采集重复计数、改写重复触发。
+**以后更新不用删了重加。** 我在仓库推了新版本，你在 Loon 插件页对这个插件下拉刷新（或点更新）就会重新拉取脚本。
+
+不用 jsDelivr：它的 `@main` 缓存清不掉，`purge` 之后还发旧版，只能靠 commit sha 钉版本 —— 那样每次更新都要换地址。
+
+备用镜像（ghproxy 挂了才用）：
+
+```
+https://gh-fast.top/https://raw.githubusercontent.com/guyue211/g1-sku-live/main/g1-sku-live.plugin
+https://gh-proxy.com/https://raw.githubusercontent.com/guyue211/g1-sku-live/main/g1-sku-live.plugin
+```
 
 ## 使用
 
