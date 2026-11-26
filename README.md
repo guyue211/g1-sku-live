@@ -53,6 +53,12 @@ https://cdn.jsdelivr.net/gh/guyue211/g1-sku-live@main/g1-sku-live.plugin
 
 **导出 JSON** —— `?format=json`，含采集、执行、配置、探测结果。
 
+## 先读这个
+
+iOS 内购 SKU 的实测清单、以及 5x/20x 为什么没有试用编号：[docs/ios-iap-skus.md](docs/ios-iap-skus.md)。
+
+一句话：**Ultra 20TB / 30TB 在 iOS 目录里只有入口编号，没有任何 `_ip_` / `_eft` 变体。** 三方独立实测一致。
+
 ## 为什么"拉不起来"
 
 三条原因，现象一样：
