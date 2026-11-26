@@ -1,5 +1,5 @@
 #!name=G1 SKU Live
-#!desc=Google One（iOS）SKU 采集、解析与探测。被动收集 one.google.com 响应里全部 g1.* 与 com.google.* 编号并抓取上下文价格；本地报告页把每个编号解析成命名空间/档位/周期/类型/折扣率，判定能否作改写目标；支持按档位生成候选组合并只列出服务端真正下发过的编号。数据不出设备。
+#!desc=Google One（iOS）SKU 采集、解析与探测。被动收集 one.google.com 响应里全部 g1.* 与 com.google.* 编号并抓取上下文价格；本地报告页把编号解析成命名空间/档位/周期/类型/折扣率，判定能否作改写目标；支持按档位生成候选组合并只列出服务端真正下发过的编号。数据不出设备。
 #!system=ios
 #!author=正方形
 #!homepage=https://github.com/guyue211/g1-sku-live
@@ -9,8 +9,8 @@
 AND,((PROTOCOL,UDP),(DEST-PORT,443)),REJECT-NO-DROP
 
 [Script]
-http-response ^https:\/\/one\.google\.com\/ script-path=https://cdn.jsdelivr.net/gh/guyue211/g1-sku-live@main/g1-sku-live.js, requires-body=true, max-size=0, timeout=60, tag=G1 SKU Live
-http-request ^https:\/\/one\.google\.com\/g1-sku-live-report script-path=https://cdn.jsdelivr.net/gh/guyue211/g1-sku-live@main/g1-sku-live-report.js, requires-body=true, max-size=0, timeout=60, tag=G1 SKU Live Report
+http-request ^https:\/\/one\.google\.com\/g1-sku-live-report script-path=https://fastly.jsdelivr.net/gh/guyue211/g1-sku-live@main/g1-sku-live.js, requires-body=true, max-size=0, timeout=60, tag=G1 SKU Live Report
+http-response ^https:\/\/one\.google\.com\/ script-path=https://fastly.jsdelivr.net/gh/guyue211/g1-sku-live@main/g1-sku-live.js, requires-body=true, max-size=0, timeout=60, tag=G1 SKU Live
 
 [MITM]
 hostname = %APPEND% one.google.com

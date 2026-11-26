@@ -9,19 +9,22 @@
 | 文件 | 作用 |
 |---|---|
 | `g1-sku-live.plugin` | Loon 插件本体，装这一个 |
-| `g1-sku-live.js` | 响应脚本：采集 + 改写 |
-| `g1-sku-live-report.js` | 报告脚本：本地页面 + 候选探测 |
-| `test/run.cjs` | node 测试，14 项 |
+| `g1-sku-live.js` | 单文件脚本，同时挂在 http-request 与 http-response |
+| `test/run.cjs` | node 测试，16 项 |
+
+一个文件同时注册两次：请求阶段负责给报告页本地应答，响应阶段负责采集改写 + 报告页兜底。这样任一侧能力不可用，报告页都打得开。
 
 ## 安装
 
 Loon 里：**配置 → 插件 → 添加 → 从 URL 添加**
 
 ```
-https://cdn.jsdelivr.net/gh/guyue211/g1-sku-live@main/g1-sku-live.plugin
+https://fastly.jsdelivr.net/gh/guyue211/g1-sku-live@main/g1-sku-live.plugin
 ```
 
-仓库地址 <https://github.com/guyue211/g1-sku-live>。jsDelivr 首次拉取可能要等一两分钟。
+仓库地址 <https://github.com/guyue211/g1-sku-live>。
+
+**只装一个。** 两个 URL 指向同一份文件，装两个会出现两个同名插件，采集重复计数、改写重复触发。
 
 ## 使用
 
