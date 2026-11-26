@@ -251,6 +251,41 @@ t("环形缓冲：最多保留 30 条", () => {
   assert.strictEqual(ring.rows.length, 30);
 });
 
+t("探针：body 里没有 g1. 时计数为 0", () => {
+  const store = {};
+  const s = run(store, { url: "https://one.google.com/ai", response: "<html><body>no skus here</body></html>" });
+  const ring = JSON.parse(store["g1.live.paths.v1"]);
+  assert.strictEqual(ring.rows[0].g1, 0);
+  assert.strictEqual(ring.rows[0].skus, 0);
+});
+
+t("探针：数出 g1. 原始出现次数并取样", () => {
+  const store = {};
+  const s = run(store, { url: "https://one.google.com/ai", response: IOS_HTML });
+  const ring = JSON.parse(store["g1.live.paths.v1"]);
+  assert.ok(ring.rows[0].g1 >= 5, "IOS_HTML 里有 5 个 g1.* 编号");
+  assert.strictEqual(ring.rows[0].skus, 6);
+  assert.ok(ring.rows[0].samples.length >= 1);
+  assert.match(ring.rows[0].samples[0], /g1\./);
+});
+
+t("报告页汇总：显示 /ai 的 body 大小与 g1. 次数", () => {
+  const store = {};
+  run(store, { url: "https://one.google.com/ai", response: IOS_HTML });
+  const s = run(store, { url: "https://one.google.com/g1-sku-live-report" });
+  const html = s.box.done.response.body;
+  assert.match(html, /累计扫描/);
+  assert.match(html, /\/ai<\/code> 最近一次/);
+  assert.match(html, /采集到 <strong>6<\/strong> 个编号/);
+});
+
+t("报告页汇总：body 无 g1. 时给出提示", () => {
+  const store = {};
+  run(store, { url: "https://one.google.com/ai", response: "<html>nothing</html>" });
+  const s = run(store, { url: "https://one.google.com/g1-sku-live-report" });
+  assert.match(s.box.done.response.body, /一次 <code>g1\.<\/code> 都没有/);
+});
+
 t("无外联", () => {
   assert.doesNotMatch(SRC, /\$httpClient|\$task\.fetch|fetch\(|XMLHttpRequest|require\(/);
 });

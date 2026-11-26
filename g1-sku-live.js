@@ -8,7 +8,7 @@
 "use strict";
 
 (function () {
-  var VERSION = "g1-sku-live-v4";
+  var VERSION = "g1-sku-live-v5";
   var ROOT = "https://one.google.com/g1-sku-live-report";
   var SCAN_KEY = "g1.live.scan.v1";
   var CFG_KEY = "g1.live.cfg.v1";
@@ -62,6 +62,26 @@
       return $persistentStore.write(JSON.stringify(value), key) !== false;
     } catch (error) { return false; }
   }
+  /* 原始探针：不依赖解析，直接数 body 里有没有 SKU 形态的字符串。
+     「g1.」出现 0 次 → 这份响应里根本没有编号，得去找别的接口。 */
+  function probeRaw(text) {
+    var out = { g1: 0, cg: 0, samples: [] };
+    if (typeof text !== "string") return out;
+    var hits = text.match(/g1\./g);
+    out.g1 = hits ? hits.length : 0;
+    var cg = text.match(/com\.google/g);
+    out.cg = cg ? cg.length : 0;
+    var from = 0;
+    while (out.samples.length < 3) {
+      var at = text.indexOf("g1.", from);
+      if (at < 0) break;
+      out.samples.push(text.slice(Math.max(0, at - 50), at + 90)
+        .replace(/\s+/g, " ").trim().slice(0, 140));
+      from = at + 3;
+    }
+    return out;
+  }
+
   /* 环形缓冲：记录脚本实际收到的请求。
      采集为空时，这一栏能立刻区分「流量没进来」和「body 没取到」。 */
   function notePath(entry) {
@@ -224,12 +244,7 @@
 
   function collectAndRewrite() {
     var now = new Date().toISOString();
-    notePath({
-      t: now.slice(11, 19),
-      path: path,
-      len: typeof body === "string" ? body.length : 0,
-      type: typeof body === "string" ? "text" : "non-text"
-    });
+    var rawProbe = probeRaw(body);
     var TOKEN = /(^|[^A-Za-z0-9._@%-])((?:g1|com\.google\.(?:gemini|one|android\.apps\.subscriptions))\.[A-Za-z0-9._-]{1,120})(?=$|[^A-Za-z0-9._-])/g;
 
     var scan = readJson(SCAN_KEY, null);
@@ -278,6 +293,17 @@
     scan.updatedAt = now;
     scan.version = VERSION;
     writeJson(SCAN_KEY, scan);
+
+    notePath({
+      t: now.slice(11, 19),
+      path: path,
+      len: typeof body === "string" ? body.length : 0,
+      type: typeof body === "string" ? "text" : "non-text",
+      skus: found,
+      g1: rawProbe.g1,
+      cg: rawProbe.cg,
+      samples: rawProbe.samples
+    });
 
     var cfg = readJson(CFG_KEY, null);
     if (!cfg || cfg.schemaVersion !== 1) {
@@ -522,6 +548,26 @@
         ? "<p class=note>脚本已生效，但还没采集到任何响应。先去 Google One App 里打开「升级 / 方案」页，再回来刷新本页。</p>"
         : "",
 
+      "<section><h2>汇总</h2>",
+      "<p style=\"font-size:16px\">累计扫描 <strong>" + num(scan.scanned) +
+      "</strong> 个响应 · 采集到编号 <strong>" + ids.length + "</strong> 个</p>",
+      (function () {
+        var lastAi = null;
+        for (var z = 0; z < ringRows.length; z += 1) {
+          if (/^\/ai$/.test(ringRows[z].path || "")) { lastAi = ringRows[z]; break; }
+        }
+        if (!lastAi) return "<p class=mute>还没见到 <code>/ai</code> 响应。进 Google One → 升级 → 方案页，让它重新拉一次。</p>";
+        return "<p><code>/ai</code> 最近一次：body " + (lastAi.len || 0) + " B · 采集到 <strong>" +
+          (lastAi.skus || 0) + "</strong> 个编号 · body 里 <code>g1.</code> 出现 <strong>" +
+          (lastAi.g1 || 0) + "</strong> 次</p>" +
+          (lastAi.g1 === 0
+            ? "<p class=note>body 里一次 <code>g1.</code> 都没有 —— 这个响应不含编号，编号来自别的接口。</p>"
+            : (lastAi.skus === 0
+              ? "<p class=note>有 <code>g1.</code> 但没解析出编号 —— 形态不匹配，看下面的样本。</p>"
+              : ""));
+      })(),
+      "</section>",
+
       "<section><h2>最近一次执行</h2>",
       "<p>路径 <code>" + esc(run.path || "-") + "</code> · 状态 <strong>" + esc(run.status || "无记录") +
       "</strong> · 本次采集 " + num(run.collected) + " · 命中 " + num(run.hits) + "</p>",
@@ -529,11 +575,16 @@
       (run.targetObserved ? "<span class=ok>是</span>" : "<span class=bad>否</span>") + "</p></section>",
 
       "<section><h2>脚本收到的请求 · " + ringRows.length + "</h2>",
-      "<p class=mute>这里空 → 流量没进 Loon（分流或 MITM 问题）；有 <code>/ai</code> 但采集为 0 → body 没取到（requires-body）。</p>",
-      (ringRows.length ? "<div class=scroll><table><thead><tr><th>时间</th><th>路径</th><th>body</th></tr></thead><tbody>" +
+      "<p class=mute>看 <code>SKU</code> 与 <code>g1.</code> 两列：前者是解析出来的编号数，后者是 body 里 <code>g1.</code> 出现的原始次数。</p>",
+      (ringRows.length ? "<div class=scroll><table><thead><tr><th>时间</th><th>路径</th><th>body</th><th>SKU</th><th>g1.</th><th>样本</th></tr></thead><tbody>" +
         ringRows.map(function (r) {
           return "<tr><td class=mute>" + esc(r.t || "") + "</td><td><code>" + esc(r.path || "") +
-            "</code></td><td>" + esc((r.type || "") + " " + (r.len || 0) + " B") + "</td></tr>";
+            "</code></td><td>" + esc((r.type || "") + " " + (r.len || 0) + " B") + "</td>" +
+            "<td>" + (r.skus || 0) + "</td><td>" + (r.g1 || 0) + "</td>" +
+            "<td class=ctx>" + esc((r.samples && r.samples[0]) || "") + "</td></tr>" +
+            (r.samples && r.samples.length > 1
+              ? "<tr><td colspan=6 class=ctx>" + esc(r.samples.slice(1).join(" ｜ ")) + "</td></tr>"
+              : "");
         }).join("") + "</tbody></table></div>" : "") + "</section>",
 
       "<section><h2>组合生成（找可替换的 offer）</h2>",
