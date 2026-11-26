@@ -13,8 +13,8 @@ function sandbox(store, opts) {
   const ctx = {
     $request: opts.url === undefined ? undefined
       : { url: opts.url, method: opts.method || "GET", body: opts.body },
-    $response: (opts.response === undefined || opts.response === false)
-      ? undefined : { body: opts.response },
+    $response: opts.noBody ? {}
+      : ((opts.response === undefined || opts.response === false) ? undefined : { body: opts.response }),
     $persistentStore: {
       read: (k) => (k in store ? store[k] : null),
       write: (v, k) => { store[k] = v; return true; },
@@ -215,6 +215,40 @@ t("?clear=1 清空", () => {
   const s = run(store, { url: "https://one.google.com/g1-sku-live-report?clear=1" });
   assert.strictEqual(JSON.parse(store["g1.live.scan.v1"]).ids.length, 0);
   assert.match(s.box.done.response.body, /已清空/);
+});
+
+t("环形缓冲：记录脚本收到的请求", () => {
+  const store = {};
+  run(store, { url: "https://one.google.com/ai?hl=zh", response: IOS_HTML });
+  run(store, { url: "https://one.google.com/plans", response: '{"a":1}' });
+  const ring = JSON.parse(store["g1.live.paths.v1"]);
+  assert.strictEqual(ring.rows.length, 2);
+  assert.strictEqual(ring.rows[0].path, "/ai");
+  assert.strictEqual(ring.rows[0].type, "text");
+  assert.ok(ring.rows[0].len > 100);
+  assert.strictEqual(ring.rows[1].path, "/plans");
+
+  const s = run(store, { url: "https://one.google.com/g1-sku-live-report" });
+  const html = s.box.done.response.body;
+  assert.match(html, /脚本收到的请求 · 2/);
+  assert.match(html, /<code>\/ai<\/code>/);
+});
+
+t("环形缓冲：body 缺失时记为 non-text", () => {
+  const store = {};
+  run(store, { url: "https://one.google.com/ai", noBody: true });
+  const ring = JSON.parse(store["g1.live.paths.v1"]);
+  assert.strictEqual(ring.rows[0].type, "non-text");
+  assert.strictEqual(ring.rows[0].len, 0);
+});
+
+t("环形缓冲：最多保留 30 条", () => {
+  const store = {};
+  for (let i = 0; i < 35; i++) {
+    run(store, { url: "https://one.google.com/ai?i=" + i, response: '{"a":1}' });
+  }
+  const ring = JSON.parse(store["g1.live.paths.v1"]);
+  assert.strictEqual(ring.rows.length, 30);
 });
 
 t("无外联", () => {

@@ -8,11 +8,12 @@
 "use strict";
 
 (function () {
-  var VERSION = "g1-sku-live-v3";
+  var VERSION = "g1-sku-live-v4";
   var ROOT = "https://one.google.com/g1-sku-live-report";
   var SCAN_KEY = "g1.live.scan.v1";
   var CFG_KEY = "g1.live.cfg.v1";
   var RUN_KEY = "g1.live.run.v1";
+  var RING_KEY = "g1.live.paths.v1";
   var LIMIT = 400;
   var MAX_BODY = 8 * 1024 * 1024;
   var GEN_CAP = 12000;
@@ -60,6 +61,15 @@
       if (typeof $persistentStore === "undefined" || !$persistentStore) return false;
       return $persistentStore.write(JSON.stringify(value), key) !== false;
     } catch (error) { return false; }
+  }
+  /* 环形缓冲：记录脚本实际收到的请求。
+     采集为空时，这一栏能立刻区分「流量没进来」和「body 没取到」。 */
+  function notePath(entry) {
+    var ring = readJson(RING_KEY, null);
+    if (!ring || !(ring.rows instanceof Array)) ring = { schemaVersion: 1, rows: [] };
+    ring.rows.push(entry);
+    while (ring.rows.length > 30) ring.rows.shift();
+    writeJson(RING_KEY, ring);
   }
   function esc(value) {
     return String(value === undefined || value === null ? "" : value)
@@ -214,6 +224,12 @@
 
   function collectAndRewrite() {
     var now = new Date().toISOString();
+    notePath({
+      t: now.slice(11, 19),
+      path: path,
+      len: typeof body === "string" ? body.length : 0,
+      type: typeof body === "string" ? "text" : "non-text"
+    });
     var TOKEN = /(^|[^A-Za-z0-9._@%-])((?:g1|com\.google\.(?:gemini|one|android\.apps\.subscriptions))\.[A-Za-z0-9._-]{1,120})(?=$|[^A-Za-z0-9._-])/g;
 
     var scan = readJson(SCAN_KEY, null);
@@ -334,6 +350,8 @@
     var scan = readJson(SCAN_KEY, { schemaVersion: 1, version: "", updatedAt: "", scanned: 0, ids: [] });
     var run = readJson(RUN_KEY, { schemaVersion: 1, version: "", at: "", hits: 0, collected: 0 });
     var cfg = readJson(CFG_KEY, { schemaVersion: 1, enabled: false, sources: [], target: "" });
+    var ring = readJson(RING_KEY, { schemaVersion: 1, rows: [] });
+    var ringRows = (ring.rows instanceof Array) ? ring.rows.slice().reverse() : [];
     var ids = (scan.ids instanceof Array) ? scan.ids : [];
     var byId = Object.create(null);
     var i;
@@ -388,7 +406,7 @@
     if (q["format"] === "json") {
       emit(JSON.stringify({
         schemaVersion: 1, version: VERSION, storageAvailable: storageOk,
-        config: cfg, run: run, probe: probe, gen: gen,
+        config: cfg, run: run, probe: probe, gen: gen, paths: ringRows,
         scan: {
           scanned: num(scan.scanned), updatedAt: scan.updatedAt || "", total: ids.length,
           ids: ids.map(function (r) {
@@ -509,6 +527,14 @@
       "</strong> · 本次采集 " + num(run.collected) + " · 命中 " + num(run.hits) + "</p>",
       "<p>目标 <code>" + esc(cfg.target || "（未设置）") + "</code> · 服务端下发过该目标：" +
       (run.targetObserved ? "<span class=ok>是</span>" : "<span class=bad>否</span>") + "</p></section>",
+
+      "<section><h2>脚本收到的请求 · " + ringRows.length + "</h2>",
+      "<p class=mute>这里空 → 流量没进 Loon（分流或 MITM 问题）；有 <code>/ai</code> 但采集为 0 → body 没取到（requires-body）。</p>",
+      (ringRows.length ? "<div class=scroll><table><thead><tr><th>时间</th><th>路径</th><th>body</th></tr></thead><tbody>" +
+        ringRows.map(function (r) {
+          return "<tr><td class=mute>" + esc(r.t || "") + "</td><td><code>" + esc(r.path || "") +
+            "</code></td><td>" + esc((r.type || "") + " " + (r.len || 0) + " B") + "</td></tr>";
+        }).join("") + "</tbody></table></div>" : "") + "</section>",
 
       "<section><h2>组合生成（找可替换的 offer）</h2>",
       "<form method=get action=\"" + ROOT + "\">",
