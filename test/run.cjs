@@ -57,7 +57,7 @@ t("报告页：http-request 阶段用 response 包装应答", () => {
   assert.ok(s.box.done.response, "应返回 response 包装");
   assert.strictEqual(s.box.done.response.status, 200);
   assert.match(s.box.done.response.headers["Content-Type"], /text\/html/);
-  assert.match(s.box.done.response.body, /v3/);
+  assert.match(s.box.done.response.body, /g1-sku-live-v\d/);
 });
 
 /* ---- 报告页在 http-response 阶段（兜底替换 404） ---- */
@@ -284,6 +284,16 @@ t("报告页汇总：body 无 g1. 时给出提示", () => {
   run(store, { url: "https://one.google.com/ai", response: "<html>nothing</html>" });
   const s = run(store, { url: "https://one.google.com/g1-sku-live-report" });
   assert.match(s.box.done.response.body, /一次 <code>g1\.<\/code> 都没有/);
+});
+
+t("报告页显示的版本来自 VERSION，不是写死的", () => {
+  const store = {};
+  const s = run(store, { url: "https://one.google.com/g1-sku-live-report" });
+  const html = s.box.done.response.body;
+  const m = html.match(/g1-sku-live-v(\d+)/);
+  assert.ok(m, "页面应出现版本号");
+  const srcVer = SRC.match(/var VERSION = "g1-sku-live-v(\d+)"/);
+  assert.strictEqual(m[1], srcVer[1], "页面版本必须与脚本 VERSION 一致");
 });
 
 t("无外联", () => {

@@ -8,7 +8,7 @@
 "use strict";
 
 (function () {
-  var VERSION = "g1-sku-live-v5";
+  var VERSION = "g1-sku-live-v6";
   var ROOT = "https://one.google.com/g1-sku-live-report";
   var SCAN_KEY = "g1.live.scan.v1";
   var CFG_KEY = "g1.live.cfg.v1";
@@ -541,7 +541,7 @@
       "nav a{display:inline-block;margin:0 12px 6px 0;color:#1a56b8;text-decoration:none;font-size:13px}",
       "</style>",
       "<h1>G1 SKU Live</h1>",
-      "<p class=mute>v3 · 采集 / 解析 / 组合探测 · 数据不出设备</p>",
+      "<p class=mute>" + esc(VERSION) + " · 采集 / 解析 / 组合探测 · 数据不出设备</p>",
       notice ? "<p class=note>" + esc(notice) + "</p>" : "",
       storageOk ? "" : "<p class=note>本地存储接口不可用，本页只读。</p>",
       num(scan.scanned) === 0
@@ -549,6 +549,7 @@
         : "",
 
       "<section><h2>汇总</h2>",
+      "<p class=mute>脚本版本 <code>" + esc(VERSION) + "</code> · 最近执行 " + esc(run.at || "无") + "</p>",
       "<p style=\"font-size:16px\">累计扫描 <strong>" + num(scan.scanned) +
       "</strong> 个响应 · 采集到编号 <strong>" + ids.length + "</strong> 个</p>",
       (function () {
